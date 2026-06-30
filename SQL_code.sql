@@ -193,8 +193,6 @@ LIMIT 1;
 
 -- Nárust průmerné mzdy meziročně napříč obory.
 
-DROP VIEW vw_mezirocni_rust_mzdy;
-
 CREATE VIEW vw_mezirocni_rust_mzdy AS
 WITH cte_narust_mezd AS (
 	SELECT 
@@ -221,7 +219,6 @@ SELECT *
 FROM vw_mezirocni_rust_mzdy;
 
 -- Nárust průmerné ceny meziročně napříč potravinami.
-DROP VIEW vw_mezirocni_rust_ceny;
 
 CREATE VIEW vw_mezirocni_rust_ceny AS
 WITH cte_prumerna_cena AS (
