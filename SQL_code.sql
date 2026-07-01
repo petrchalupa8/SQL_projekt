@@ -315,5 +315,43 @@ SELECT
 FROM cte_lead_hdp
 WHERE hdp_dalsi_rok IS NOT NULL;
 
+-- 1. tabulka
+
+CREATE VIEW vw_mzdy_vsechny_roky AS
+WITH rocni_mzdy AS (
+    SELECT *
+    FROM serazeno_mzdy 
+),
+srovnani_s_minulym_rokem AS (
+    SELECT 
+        rok,
+        obor,
+        prumerna_mzda,
+        LAG(prumerna_mzda) OVER (PARTITION BY obor ORDER BY rok) AS mzda_minuly_rok
+    FROM rocni_mzdy
+)
+SELECT 
+    rok,
+    obor,
+    prumerna_mzda,
+    mzda_minuly_rok,
+    (prumerna_mzda - mzda_minuly_rok) AS mezirocni_rozdil
+FROM srovnani_s_minulym_rokem;
+
+CREATE TABLE t_petr_chalupa_project_sql_primary_final AS
+WITH cte_ceny_rok_prumer AS (
+	SELECT 
+		rok_od,
+		ROUND(avg(cena), 2) AS prumerna_cena_rok,
+		kategorie
+	FROM vw_ceny
+	GROUP BY rok_od, kategorie
+	ORDER BY rok_od
+)
+SELECT *
+FROM cte_ceny_rok_prumer crp 
+JOIN vw_mzdy_vsechny_roky vmvr
+	ON crp.rok_od = vmvr.rok;
+
 
 
