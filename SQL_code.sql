@@ -353,5 +353,39 @@ FROM cte_ceny_rok_prumer crp
 JOIN vw_mzdy_vsechny_roky vmvr
 	ON crp.rok_od = vmvr.rok;
 
-
+-- 2. tabulka
+CREATE TABLE t_Petr_Chalupa_project_SQL_secondary_final AS
+WITH cte_staty_evropa AS (
+	SELECT 
+		co.country,       
+        co.continent,     
+        eco."year",   
+        eco.gdp,
+        eco.gini,
+        eco.population
+	FROM economies eco 
+	JOIN countries co 
+		ON co.country = eco.country
+),
+cte_lag_gdp AS (
+	SELECT 
+		country,
+		LAG(gdp) OVER (PARTITION BY country ORDER BY "year") AS gdp_minuly_rok,
+		"year",
+		gdp,
+		gini,
+		population,
+		continent
+	FROM cte_staty_evropa
+)
+SELECT
+	country,
+	"year",
+	gdp,
+	(((gdp - gdp_minuly_rok) / gdp_minuly_rok) * 100) AS gdp_procentualni_zmena,
+	gini,
+	population
+FROM cte_lag_gdp
+WHERE continent = 'Europe'
+	AND gdp IS NOT NULL;
 
