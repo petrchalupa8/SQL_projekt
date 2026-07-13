@@ -4,37 +4,17 @@ Tento dokument slouží jako průvodní zpráva k výzkumnému projektu zaměře
 
 ---
 
-## 1. Cíl projektu a metodika
 Cílem projektu bylo ověřit sadu 5 výzkumných hypotéz týkajících se ekonomické situace obyvatel ČR v letech 2006–2018. 
 Zdrojem dat byly primární sady Českého statistického úřadu (ČSÚ) pro mzdy a ceny potravin a makroekonomická data Světové banky / ČSÚ pro HDP.
 
 ### Postup zpracování:
-1. **Čištění a filtrace dat:** Odstranění nekompletních záznamů a agregace mezd na roční průměry za jednotlivá odvětví.
-2. **Sjednocení časových řad:** Harmonizace období na srovnatelné roky (2006–2018).
-3. **Výpočet odvozených metrik:** Výpočet reálné kupní síly (kolik kg/l komodity lze koupit za průměrný plat) a meziročních procentuálních změn.
-4. **Makroekonomická korelace:** Propojení vývoje cen a mezd s dynamikou HDP s uvážením časového posunu (setrvačnosti).
+1. **Vytvořili jsme dvě tabulky dle zadání:** Vytvořili jsme výchozí tabulky, ze kterých jsme dále čerpali a využívali je v dalších částech projektu.
+2. **Vytvořili jsme 5 Common table expression SQL, které umožní vyčíst odpovědi na zadané otázky.** 
 
 ---
 
-## 2. Struktura mezivýsledků (Mezitabulky)
-V průběhu analýzy byly v databázi vytvořeny klíčové mezivýsledky, které sloužily jako podklad pro finální syntézu:
-
-### A. Agregované mzdy podle odvětví
-* **Popis:** Obsahuje očištěné průměrné roční mzdy rozdělené podle klasifikace odvětví CZ-NACE.
-* **Klíčové metriky:** Rok, kód odvětví, název odvětví, průměrná mzda v Kč.
-
-### B. Průměrné roční ceny potravin
-* **Popis:** Agregované měsíční reprezentanty cen vybraných potravinových komodit na roční průměry.
-* **Klíčové metriky:** Rok, kód potraviny, název potraviny, průměrná cena v Kč za jednotku (kg/l).
-
-### C. Komparativní matice kupní síly
-* **Popis:** Spojená tabulka (JOIN) pro výzkumnou otázku č. 2, která přepočítává průměrnou mzdu každého odvětví na reálný objem chleba a mléka.
-
----
-
-## 3. Shrnutí naplnění hypotéz
-* **Hypotéza 1 (Růst mezd):** Potvrzena. Všechna odvětví zaznamenala mezi lety 2006 a 2018 růst, žádné dlouhodobě neklesalo.
-* **Hypotéza 2 (Kupní síla):** Potvrzena. Kupní síla obyvatel se plošně zvýšila, u mléka výrazněji než u chleba.
-* **Hypotéza 3 (Stabilita cen):** Identifikována nejstabilnější komodita – Banány žluté s průměrným meziročním růstem pouze 0,81 %.
-* **Hypotéza 4 (Cenové šoky):** Potvrzena existence extrémních let (zejména rok 2013 u brambor s nárůstem přes 60 %).
-* **Hypotéza 5 (Vliv HDP):** Potvrzen vliv HDP na mzdy a ceny s ročním zpožděním (ekonomická setrvačnost).
+* **Hypotéza 1 (Růst mezd):** Potvrdilo se, že růst mezd byl výrazným jevem a byl trendem pro větinu let. Celkově u 16 odvětví z celkových 19 se ale meziroční pokles vyskytnul. Jako nejrizikovější obor se jeví Těžba a dobývání, kde došlo celkem čtyřikrát k meziročnímu poklesu mezd.
+*  **Hypotéza 2 (Kupní síla):** Zde jsme upustili od segmentování mezd dle oborů a zaměřili jsme se na jednu průměrnou mzdu napříč všemi obory za každý jeden z měřených roků. Následně jsme si zanalyzovali a zprůměrovali ceny zkoumaných potravin (Mléko polotučné pasterované, Chléb konzumní kmínový) pro každý rok. Ze zjištených hodnot bylo pomocí jednoduchého podílu zjištěno, kolik kg/l sortimentu si lze za průměrnou mzdu pořídit. Nebrali jsme v úvahu hodnoty za desetinou čárkou, jelikož si obvykle nelze koupit pouze část celku. Zajímavý výsledek byl, že průměrná mzda uožňuje nákupu sortimentu přesahující ve všech případech jednu tunu.
+*  **Hypotéza 3 (Stabilita cen):** Našim úkolem bylo zanalyzovat zdražování jednotlivých kategorií potravin a vypsat kategorii, která zdražuje nejpomaleji. Odpověď A: Brali jsme v úvahu také negativní zdražování (zlevňování). V tomto případě byl výsledkem Cukr krystal. Odpověď B: Brali jsme v úvahu pouze zdražování. Zde jako nejpomaleji rostoucí cena vzešly Banány žluté.
+*  **Hypotéza 4 (Inflace):** Naším úkol bylo ověřit, zda existuje rok, kdy byl meziroční nárůst cen potravin výrazně vyšší než růst mezd (větší než 10 %). Po analýze se ukázalo, že meziroční nárusty byly oběma směry. V některých letech došlo k rychlejšímu růstu cena v některém k rychlejšímu růstu mezd. V žádném však nedošlo k meziročním růstu nad 10 %.
+*  **Hypotéza 5 (Vliv HDP):** Z výsledných dat se nepotrvrdilo, že by HDP mělo vliv na růst cena mezd, což dokazuje rok 2018, kdy byl pokles celkového HDP, avšak růst cen byl téměř o 10%.
