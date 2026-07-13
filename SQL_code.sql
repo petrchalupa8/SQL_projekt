@@ -1,3 +1,341 @@
+CREATE TABLE t_Petr_Chalupa_project_SQL_primary_final AS
+-- Spojili jsme si kód kategorie a název potraviny + extrahovali jsme pouze rok.
+WITH cte_spojeni_ceny_potraviny AS (
+	SELECT 
+		cp.value AS cena_parcialni,
+		DATE_PART ('year', cp.date_from) AS rok_cena,
+		cpc.name AS potravina,
+		cpc.price_value AS hodnota_mnozstvi,
+		cpc.price_unit AS jednotka
+	FROM czechia_price cp
+	JOIN czechia_price_category cpc
+		ON cpc.code = cp.category_code
+),
+-- Zprůměrovali jsme cenu za rok dané potraviny.
+cte_prumer_cena_rok AS (
+	SELECT 
+		ROUND(AVG(cena_parcialni)::numeric, 2) AS cena,
+		rok_cena,
+		potravina,
+		hodnota_mnozstvi,
+		jednotka
+	FROM cte_spojeni_ceny_potraviny
+	GROUP BY rok_cena, potravina, hodnota_mnozstvi, jednotka
+),
+-- Napojili jsme název odvětví a filtrovali mzdy dle kódu a přepočtené hodnoty - eliminovali hodnoty fyzické.
+cte_napojeni_nazev_mzdy AS (
+	SELECT *
+	FROM czechia_payroll cp 
+	JOIN czechia_payroll_industry_branch cpib
+		ON cp.industry_branch_code = cpib.code
+	WHERE cp.value_type_code = 5958
+		AND cp.calculation_code = 200
+),
+-- Zprůměrovali jsme mzdu v rámci oboru za každý rok.
+cte_prumer_mzda AS (
+	SELECT 
+		ROUND(AVG(value)::numeric, 2) AS mzda,
+		payroll_year AS rok_mzda,
+		name AS odvetvi
+	FROM cte_napojeni_nazev_mzdy
+	GROUP BY rok_mzda, name
+)
+SELECT *
+FROM cte_prumer_mzda cpm
+JOIN cte_prumer_cena_rok cpcr
+	ON cpcr.rok_cena = cpm.rok_mzda
+ORDER BY odvetvi, rok_mzda, potravina;
+
+CREATE TABLE t_Petr_Chalupa_project_SQL_secondary_final AS
+SELECT 
+	c.country AS stat,
+	e."year" AS rok,
+	e.gdp AS hdp,
+	e.population AS populace,
+	(e.gdp / e.population) AS hdp_na_obyvatele
+FROM countries c 
+JOIN economies e
+	ON e.country = c.country 
+WHERE c.continent = 'Europe'
+ORDER BY stat, rok;
+
+
+-- Otázka č.1 Rostou v průběhu let mzdy ve všech odvětvích, nebo v některých klesají?
+WITH cte_seskupeni_mzdy AS (
+	SELECT
+		mzda,
+		rok_mzda,
+		odvetvi
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY odvetvi, mzda, rok_mzda
+),
+cte_LAG_mzda AS (
+	SELECT 
+		mzda,
+		rok_mzda,
+		odvetvi,
+		LAG(mzda) OVER (PARTITION BY odvetvi ORDER BY rok_mzda) AS mzda_minuly_rok
+	FROM cte_seskupeni_mzdy
+),
+cte_not_null AS (
+	SELECT *
+	FROM cte_LAG_mzda
+	WHERE mzda_minuly_rok IS NOT NULL
+	ORDER BY odvetvi, rok_mzda
+),
+cte_mezirocni_porovnani_mzdy AS (
+	SELECT 
+		*,
+		CASE 
+			WHEN mzda < mzda_minuly_rok THEN 'mzda klesá'
+			ELSE 'mzda neklesá'
+		END mezirocni_porovnani_mzdy
+	FROM cte_not_null
+)
+SELECT 
+	odvetvi,
+	count(odvetvi) AS pocet_let_s_klesajici_mzdou_v_odvetvi
+FROM cte_mezirocni_porovnani_mzdy
+WHERE mezirocni_porovnani_mzdy = 'mzda klesá'
+GROUP BY odvetvi;
+
+-- Otázka č.2 Kolik je možné si koupit litrů mléka a kilogramů chleba za první a poslední srovnatelné období v dostupných datech cen a mezd?
+
+-- Vypočítali jsme si průměrnou mzdu za rok napříč odvětvími.
+WITH cte_prumerna_mzda AS (
+	SELECT 
+		ROUND(AVG(mzda), 2) AS prumerna_mzda_rok,
+		rok_mzda
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY rok_mzda
+	ORDER BY rok_mzda
+),
+-- Vypočítali jsme si cenu potraviny za rok napříč odvětvími.
+cte_prumerna_cena AS (
+	SELECT 
+		ROUND(AVG(cena)::numeric, 2) AS prumerna_cena_rok,
+		rok_cena,
+		potravina,
+		hodnota_mnozstvi,
+		jednotka
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY rok_cena, potravina, hodnota_mnozstvi, jednotka
+	ORDER BY rok_cena, potravina
+),
+-- Spojili jsme si průměrnou mzdu napříč obory za kalendářní rok s cenami jednotlivých potraviny za daný kalendářní rok.
+cte_spojeni_cena_mzda AS (
+	SELECT *
+	FROM cte_prumerna_cena cpc
+	JOIN cte_prumerna_mzda cpm
+		ON cpc.rok_cena = cpm.rok_mzda
+)
+-- Spočítali jsme, kolik celých kilogramů/litrů potraviny jsme schopni zakoupit za průměrnou mzdu.(lze koupit jen celé balení, tedy cokoliv v desetiné čárce nelze zakoupit)
+SELECT 
+	rok_mzda,
+	potravina,
+	FLOOR(prumerna_mzda_rok / prumerna_cena_rok) AS kg_l_mzda,
+	jednotka
+FROM cte_spojeni_cena_mzda
+WHERE potravina IN ('Chléb konzumní kmínový', 'Mléko polotučné pasterované');
+
+-- Otázka č.3 Která kategorie potravin zdražuje nejpomaleji (je u ní nejnižší percentuální meziroční nárůst)? 
+-- Odpověď A - bereme potravinu, která měl a nejpomalejší zdražování a počítá se zde také zlevňování.
+
+WITH cte_odebrani_odvetvi AS (
+	SELECT
+		rok_cena AS rok,
+		AVG(cena) AS cena,
+		potravina
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY potravina, rok
+),
+cte_lag AS (
+	SELECT
+		*,
+		LAG(cena) OVER (PARTITION BY potravina ORDER BY rok) AS cena_minuly_rok
+	FROM cte_odebrani_odvetvi
+),
+cte_mezirocni_narust AS (
+	SELECT
+		*,
+		(cena / cena_minuly_rok) AS mezirocni_narust
+	FROM cte_lag
+	WHERE cena_minuly_rok IS NOT NULL
+),
+cte_prumerny_narust_potravina AS (
+	SELECT 
+		potravina,
+		AVG(mezirocni_narust) AS prumerny_narust
+	FROM cte_mezirocni_narust
+	GROUP BY potravina
+)
+SELECT *
+FROM cte_prumerny_narust_potravina
+ORDER BY prumerny_narust
+LIMIT 1;
+
+-- Odpověď B - bereme jen explicitně potraviny, které zdražovaly (nezlevňovaly).
+
+WITH cte_odebrani_odvetvi AS (
+	SELECT
+		rok_cena AS rok,
+		AVG(cena) AS cena,
+		potravina
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY potravina, rok
+),
+cte_lag AS (
+	SELECT
+		*,
+		LAG(cena) OVER (PARTITION BY potravina ORDER BY rok) AS cena_minuly_rok
+	FROM cte_odebrani_odvetvi
+),
+cte_mezirocni_narust AS (
+	SELECT
+		*,
+		(cena / cena_minuly_rok) AS mezirocni_narust
+	FROM cte_lag
+	WHERE cena_minuly_rok IS NOT NULL
+),
+cte_prumerny_narust_potravina AS (
+	SELECT 
+		potravina,
+		AVG(mezirocni_narust) AS prumerny_narust
+	FROM cte_mezirocni_narust
+	GROUP BY potravina
+)
+SELECT *
+FROM cte_prumerny_narust_potravina
+WHERE prumerny_narust > 1
+ORDER BY prumerny_narust
+LIMIT 1;
+
+-- Otázka č.4 Ptáme se "Existuje rok, ve kterém byl meziroční nárůst cen potravin výrazně vyšší než růst mezd (větší než 10 %)?", neptáme se na cenové šoky. Zde je ideální porovnat meziroční nárůsty mezd (za všechny obory) a nárůsty cen (za všechny kategorie).
+WITH cte_prumer_mzda_cena AS (	
+	SELECT 
+		rok_mzda AS rok,
+		ROUND(AVG(cena), 2) AS rocni_prumer_cena,
+		ROUND(AVG(mzda), 2) AS rocni_prumer_mzda
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY rok_mzda
+),
+cte_lag AS (
+	SELECT
+		rok,
+		rocni_prumer_cena,
+		LAG(rocni_prumer_cena) OVER (ORDER BY rok) AS cena_minuly_rok,
+		rocni_prumer_mzda,
+		LAG(rocni_prumer_mzda) OVER (ORDER BY rok) AS mzda_minuly_rok
+	FROM cte_prumer_mzda_cena
+),
+cte_mezirocni_narust AS (
+	SELECT 
+		rok,
+		rocni_prumer_cena,
+		cena_minuly_rok,
+		(rocni_prumer_cena / cena_minuly_rok) AS mezirocni_narust_cena,
+		rocni_prumer_mzda,
+		mzda_minuly_rok,
+		(rocni_prumer_mzda / mzda_minuly_rok) AS mezirocni_narust_mzda
+	FROM cte_lag
+),
+cte_provnani_narustu_ceny_mzdy AS (
+	SELECT 
+		*,
+		(mezirocni_narust_cena / mezirocni_narust_mzda) AS porovnani_narustu_cena_mzda
+	FROM cte_mezirocni_narust
+),
+cte_inflace AS (
+	SELECT 
+		*,
+		CASE
+			WHEN porovnani_narustu_cena_mzda < 1 THEN 'mzdy rostly rychleji než ceny'
+			WHEN porovnani_narustu_cena_mzda = 1 THEN 'mzdy rostly stejně rychle jako ceny'
+			WHEN porovnani_narustu_cena_mzda > 1.1 THEN 'ceny rostly výrazně rychleji než mzdy'
+			ELSE 'ceny rostly rychleji než mzdy'
+		END stav_inflace
+	FROM cte_provnani_narustu_ceny_mzdy
+	WHERE cena_minuly_rok IS NOT NULL
+	ORDER BY rok
+)
+SELECT *
+FROM cte_inflace;
+WHERE stav_inflace = 'ceny rostly výrazně rychleji než mzdy';
+	
+
+-- Otázka č.5 Má výška HDP vliv na změny ve mzdách a cenách potravin? Neboli, pokud HDP vzroste výrazněji v jednom roce, 
+-- projeví se to na cenách potravin či mzdách ve stejném nebo následujícím roce výraznějším růstem?
+
+WITH cte_prumer_mzda_cena AS (	
+	SELECT 
+		rok_mzda AS rok,
+		ROUND(AVG(cena), 2) AS rocni_prumer_cena,
+		ROUND(AVG(mzda), 2) AS rocni_prumer_mzda
+	FROM t_Petr_Chalupa_project_SQL_primary_final
+	GROUP BY rok_mzda
+),
+cte_lag AS (
+	SELECT
+		rok,
+		rocni_prumer_cena,
+		LAG(rocni_prumer_cena) OVER (ORDER BY rok) AS cena_minuly_rok,
+		rocni_prumer_mzda,
+		LAG(rocni_prumer_mzda) OVER (ORDER BY rok) AS mzda_minuly_rok
+	FROM cte_prumer_mzda_cena
+),
+cte_mezirocni_narust AS (
+	SELECT 
+		rok,
+		rocni_prumer_cena,
+		cena_minuly_rok,
+		(rocni_prumer_cena / cena_minuly_rok) AS mezirocni_narust_cena,
+		rocni_prumer_mzda,
+		mzda_minuly_rok,
+		(rocni_prumer_mzda / mzda_minuly_rok) AS mezirocni_narust_mzda
+	FROM cte_lag
+),
+cte_hdp_cz AS (
+	SELECT 
+		stat,	
+		rok,	
+		hdp,
+		LEAD(hdp) OVER (ORDER BY rok DESC) AS hdp_dalsi_rok,
+		populace,	
+		hdp_na_obyvatele
+	FROM t_petr_chalupa_project_sql_secondary_final tpcpssf
+	WHERE hdp IS NOT NULL
+		AND stat = 'Czech Republic'
+),
+cte_rust_hdp AS (
+	SELECT 
+		stat,	
+		rok,	
+		hdp,
+		hdp_dalsi_rok,
+		(hdp_dalsi_rok / hdp) AS narust_hdp_dalsi_rok,
+		populace,	
+		hdp_na_obyvatele
+	FROM cte_hdp_cz
+),
+cte_spojeni_hdp_cen_mezd AS (
+	SELECT 
+		crh.rok,
+		crh.narust_hdp_dalsi_rok,
+		cmn.mezirocni_narust_cena,
+		cmn.mezirocni_narust_mzda
+	FROM cte_rust_hdp crh
+	JOIN cte_mezirocni_narust cmn
+		ON crh.rok = cmn.rok
+)
+SELECT *
+FROM cte_spojeni_hdp_cen_mezd
+WHERE mezirocni_narust_cena IS NOT NULL
+ORDER BY rok;
+
+
+-- Původní verze SQL kódu. Chybné - nebrat v úvahu.
+
+
 -- 1.Rostou v průběhu let mzdy ve všech odvětvích, nebo v některých klesají?
 
 CREATE VIEW serazeno_mzdy AS
