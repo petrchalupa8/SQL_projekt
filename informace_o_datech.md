@@ -1,37 +1,165 @@
-# Informace o výstupních datech a kvalitě datových sad
+# Informace o datech a technická dokumentace projektu
 
-Tento dokument detailně popisuje stav výstupních datových sad, jejich datovou kvalitu, identifikované anomálie a místa, kde chybí hodnoty (NULL záznamy).
-
----
-
-## 1. Chybějící hodnoty (Missing Data / NULLs)
-
-Při zpracování a propojování primárních datových sad bylo nutné ošetřit několik významných výpadků a nesrovnalostí v datech ČSÚ:
-
-### A. Oblast cen potravin (Sada Ceny)
-* **Chybějící roky u specifických komodit:** Některé potraviny nebyly sledovány po celou dobu (2006–2018). Například u některých druhů zeleniny či specifických mléčných výrobků chyběla data pro roky 2006 a 2007 z důvodu změny metodiky spotřebního koše ČSÚ.
-* **Řešení v projektu:** Tyto komodity byly z plošného meziročního porovnání vyřazeny, aby nedošlo ke zkreslení průměrů. Analýza pracovala pouze s plně validními řadami (jako je chléb, mléko, eidam, brambory, banány).
-
-### B. Oblast mezd (Sada Mzdy)
-* **Neklasifikovaná odvětví:** V primárních datech se vyskytovaly záznamy s chybějícím nebo neznámým kódem odvětví (označeno jako "Nerozlišeno" nebo NULL).
-* **Řešení v projektu:** Tyto řádky byly při čištění dat striktně odfiltrovány (`WHERE odvetvi IS NOT NULL`), protože nebylo možné určit jejich ekonomický kontext. Analýza se zaměřila výhradně na 19 standardizovaných odvětví podle CZ-NACE.
-
-### C. Propojení dat (JOIN operace)
-* Při tvorbě finální datové sady vznikaly potenciální NULL hodnoty v letech, kde se nekryla data cen (která v některých okrajových měsících chyběla) s daty mezd (která jsou vykazována kvartálně/ročně). Všechny výstupní tabulky byly ošetřeny tak, aby obsahovaly pouze kompletní průniky (`INNER JOIN`).
+Tento dokument slouží jako technická dokumentace k projektu zaměřenému na analýzu vývoje mezd, cen potravin a makroekonomických ukazatelů v České republice. Popisuje použité zdrojové datové sady, způsob jejich zpracování, strukturu vytvořených tabulek a metodologii použitou při následné analytické části projektu.
 
 ---
 
-## 2. Datové anomálie a metodické poznámky
+# 1. Použité datové zdroje
 
-* **Extrémní výkyv v roce 2013 (Brambory):** Růst ceny konzumních brambor o 60,32 % byl podroben křížové kontrole. Nejedná se o chybu v datech, ale o reálnou historickou anomálii způsobenou extrémní neúrodou v ČR i v Evropě v kombinaci s nízkými zásobami z předchozího roku.
-* **Pokles mezd v Peněžnictví (2013):** Meziroční pokles průměrné mzdy v sektoru *Peněžnictví a pojišťovnictví* o -8,91 % je způsoben plošným omezením ročních bonusů a restrukturalizací bankovního sektoru po dojezdu finanční krize, což kontrastuje s tehdejším růstem cen potravin.
-* **Fixace cen u globálních komodit:** U banánů byla zjištěna extrémně nízká variance cen (průměrný nárůst 0,81 %). Data potvrzují status komodity jako marketingového "loss leaderu" obchodních řetězců.
+Pro zpracování projektu byly využity veřejně dostupné datové sady z databáze společnosti Engeto, které vycházejí z oficiálních statistik Českého statistického úřadu (ČSÚ) a Světové banky.
+
+Byly použity následující tabulky:
+
+- **`czechia_payroll`** – obsahuje údaje o mzdách a počtech zaměstnanců v jednotlivých odvětvích české ekonomiky.
+- **`czechia_payroll_industry_branch`** – číselník ekonomických odvětví (CZ-NACE), který umožňuje převod číselných kódů na názvy odvětví.
+- **`czechia_price`** – obsahuje historické ceny vybraných potravin sledovaných Českým statistickým úřadem.
+- **`czechia_price_category`** – číselník kategorií potravin s názvy, jednotkami a množstvím.
+- **`countries`** – seznam států včetně jejich geografického zařazení.
+- **`economies`** – makroekonomické ukazatele jednotlivých států (HDP, populace a další ekonomické charakteristiky).
+
+Na základě těchto tabulek byly vytvořeny dvě finální tabulky požadované zadáním projektu:
+
+- `t_Petr_Chalupa_project_SQL_primary_final`
+- `t_Petr_Chalupa_project_SQL_secondary_final`
+
+Právě tyto dvě tabulky následně slouží jako jediný zdroj dat pro všechny analytické SQL dotazy.
 
 ---
 
-## 3. Formát a dostupnost výstupů
-Finální vyčištěná data jsou uložena v databázi ve dvou hlavních relačních tabulkách:
-1.  `t_jmeno_prijmeni_project_SQL_primary_final` (obsahuje kompletně propojená a vyčištěná data mezd a cen potravin pro ČR bez NULL hodnot).
-2.  `t_jmeno_prijmeni_project_SQL_secondary_final` (obsahuje makroekonomická data HDP, úrokových sazeb a kryptoměn/komodit pro širší kontext).
+# 2. Transformace a příprava dat
 
-Obě tabulky jsou plně indexované, s vyčištěnými datovými typy (např. `DECIMAL` pro finanční částky namísto nepřesného `FLOAT`).
+Před samotnou analýzou bylo nutné provést několik kroků vedoucích k očištění a sjednocení dat.
+
+## Agregace cen potravin
+
+Tabulka `czechia_price` obsahuje více záznamů v průběhu jednoho roku, protože ceny jsou sledovány v kratších časových intervalech.
+
+Pro potřeby projektu bylo nutné převést tato data na společnou roční úroveň. Nejprve byl z časového údaje extrahován kalendářní rok a následně byla pro každou kategorii potraviny vypočtena průměrná cena za daný rok.
+
+Díky této agregaci bylo možné ceny přímo porovnávat s ročními údaji o mzdách.
+
+---
+
+## Agregace mezd
+
+Obdobným způsobem byla zpracována data o mzdách.
+
+Původní tabulka obsahuje více typů ukazatelů, proto bylo nejprve potřeba vybrat pouze údaje představující průměrnou hrubou mzdu přepočtenou na plný pracovní úvazek.
+
+Konkrétně byly ponechány pouze řádky s:
+
+- **value_type_code = 5958** (průměrná hrubá mzda)
+- **calculation_code = 200** (přepočtený počet zaměstnanců)
+
+Tím byly odstraněny ostatní statistické ukazatele, které nebyly pro analýzu relevantní.
+
+Následně byly mzdy zprůměrovány za jednotlivé roky a ekonomická odvětví.
+
+---
+
+## Propojení číselníkových tabulek
+
+Původní datové sady obsahují řadu číselných identifikátorů.
+
+Pro zvýšení čitelnosti byly všechny potřebné tabulky propojeny s odpovídajícími číselníky.
+
+Konkrétně byly nahrazeny:
+
+- kódy kategorií potravin jejich názvy,
+- kódy ekonomických odvětví názvy odvětví.
+
+Díky tomu již finální tabulky obsahují přímo textové hodnoty a není nutné dohledávat význam jednotlivých kódů.
+
+---
+
+## Vytvoření primární tabulky
+
+Primární tabulka vznikla propojením agregovaných cen potravin a agregovaných mezd prostřednictvím společného kalendářního roku.
+
+Výsledkem je jednotná datová sada obsahující:
+
+- rok,
+- ekonomické odvětví,
+- průměrnou mzdu,
+- kategorii potraviny,
+- průměrnou cenu potraviny,
+- množství,
+- měrnou jednotku.
+
+Protože ke spojení dochází pouze nad společnými roky obou datových sad, obsahuje výsledná tabulka pouze vzájemně srovnatelné období let **2006–2018**.
+
+Právě tato tabulka představuje hlavní datový zdroj pro první čtyři analytické otázky projektu.
+
+---
+
+## Vytvoření sekundární tabulky
+
+Sekundární tabulka byla vytvořena propojením tabulek `countries` a `economies`.
+
+Tabulka `countries` byla využita především z důvodu geografické filtrace, protože umožňuje jednoznačně určit příslušnost jednotlivých států ke kontinentům.
+
+Výsledná tabulka obsahuje pouze evropské státy a zahrnuje následující ukazatele:
+
+- stát,
+- rok,
+- HDP,
+- počet obyvatel,
+- HDP na obyvatele.
+
+Sekundární tabulka slouží jako zdroj makroekonomických dat využitých při analýze vztahu mezi vývojem HDP, mezd a cen potravin.
+
+---
+
+# 3. Datový slovník
+
+## Primární tabulka
+
+### `t_Petr_Chalupa_project_SQL_primary_final`
+
+| Sloupec | Datový typ | Popis |
+|----------|------------|-------|
+| rok | INTEGER | Kalendářní rok sledování |
+| odvetvi | VARCHAR | Název ekonomického odvětví |
+| mzda | NUMERIC | Průměrná hrubá mzda v daném roce |
+| potravina | VARCHAR | Název sledované potraviny |
+| cena | NUMERIC | Průměrná cena potraviny za daný rok |
+| hodnota_mnozstvi | NUMERIC | Velikost sledovaného balení |
+| jednotka | VARCHAR | Jednotka množství (kg, l, ks apod.) |
+
+---
+
+## Sekundární tabulka
+
+### `t_Petr_Chalupa_project_SQL_secondary_final`
+
+| Sloupec | Datový typ | Popis |
+|----------|------------|-------|
+| stat | VARCHAR | Název státu |
+| rok | INTEGER | Kalendářní rok |
+| hdp | NUMERIC | Hrubý domácí produkt |
+| populace | BIGINT | Počet obyvatel |
+| hdp_na_obyvatele | NUMERIC | Přepočtený HDP na jednoho obyvatele |
+
+---
+
+# 4. Metodologie zpracování
+
+Projekt byl zpracován výhradně pomocí jazyka SQL.
+
+Při tvorbě finálních tabulek i analytických dotazů byly využity především **Common Table Expressions (CTE)**, které umožnily rozdělit složitější SQL dotazy do několika logických kroků. Díky tomu je celý kód přehlednější, lépe čitelný a jednotlivé části lze snadněji kontrolovat i upravovat.
+
+Pro výpočty meziročních změn byly využity **analytické (window) funkce**, zejména funkce **LAG()** a **LEAD()**. Ty umožňují porovnávat aktuální hodnotu s hodnotou z předchozího nebo následujícího roku bez nutnosti vytvářet složité self-joiny. Tento přístup byl využit zejména při výpočtu meziročních změn mezd, cen potravin a HDP.
+
+Dalším významným krokem bylo využití agregačních funkcí (`AVG`, `ROUND`) pro převod původních dat na roční průměry. Tím byla sjednocena časová granularita jednotlivých datových sad a umožněno jejich vzájemné porovnávání.
+
+Veškeré analytické dotazy byly následně vytvářeny výhradně nad primární a sekundární tabulkou vytvořenou v první části projektu, čímž bylo splněno zadání projektu a zároveň zajištěna jednotná datová základna pro všechny výzkumné otázky.
+
+---
+
+# 5. Shrnutí
+
+Výsledkem přípravy dat jsou dvě přehledné tabulky představující jednotnou datovou základnu celého projektu.
+
+Primární tabulka spojuje informace o průměrných mzdách a cenách potravin v České republice a slouží jako hlavní zdroj pro analýzu kupní síly, vývoje mezd i cen potravin. Sekundární tabulka rozšiřuje projekt o makroekonomické ukazatele evropských států a umožňuje analyzovat souvislosti mezi vývojem HDP a sledovanými ekonomickými ukazateli.
+
+Důraz byl kladen především na očištění dat, sjednocení časového rozlišení, čitelnost výsledných tabulek a využití moderních SQL technik, jako jsou Common Table Expressions a analytické (window) funkce.
