@@ -9,7 +9,7 @@ Zdrojem dat byly primární sady Českého statistického úřadu (ČSÚ) pro mz
 
 ### Postup zpracování:
 1. **Vytvořili jsme dvě tabulky dle zadání:** Vytvořili jsme výchozí tabulky, ze kterých jsme dále čerpali a využívali je v dalších částech projektu.
-2. **Vytvořili jsme 5 Common table expression SQL, které umožní vyčíst odpovědi na zadané otázky.** 
+2. **Pro zodpovězení jednotlivých výzkumných otázek byly vytvořeny samostatné SQL dotazy využívající zejména **Common Table Expressions (CTE)** a **analytické (window) funkce**, které umožnily efektivně analyzovat meziroční změny sledovaných ukazatelů.** 
 
 ---
 
