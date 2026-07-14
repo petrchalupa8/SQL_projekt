@@ -118,12 +118,13 @@ Sekundární tabulka slouží jako zdroj makroekonomických dat využitých při
 
 | Sloupec | Datový typ | Popis |
 |----------|------------|-------|
-| rok | INTEGER | Kalendářní rok sledování |
+| rok_mzda | INTEGER | Kalendářní rok sledování |
 | odvetvi | VARCHAR | Název ekonomického odvětví |
 | mzda | NUMERIC | Průměrná hrubá mzda v daném roce |
 | potravina | VARCHAR | Název sledované potraviny |
 | cena | NUMERIC | Průměrná cena potraviny za daný rok |
-| hodnota_mnozstvi | NUMERIC | Velikost sledovaného balení |
+| rok_cena | FLOAT | Průměrná cena potraviny za daný rok |
+| hodnota_mnozstvi | FLOAT | Velikost sledovaného balení |
 | jednotka | VARCHAR | Jednotka množství (kg, l, ks apod.) |
 
 ---
@@ -134,11 +135,11 @@ Sekundární tabulka slouží jako zdroj makroekonomických dat využitých při
 
 | Sloupec | Datový typ | Popis |
 |----------|------------|-------|
-| stat | VARCHAR | Název státu |
+| stat | TEXT | Název státu |
 | rok | INTEGER | Kalendářní rok |
-| hdp | NUMERIC | Hrubý domácí produkt |
-| populace | BIGINT | Počet obyvatel |
-| hdp_na_obyvatele | NUMERIC | Přepočtený HDP na jednoho obyvatele |
+| hdp | FLOAT | Hrubý domácí produkt |
+| populace | FLOAT | Počet obyvatel |
+| hdp_na_obyvatele | FLOAT | Přepočtený HDP na jednoho obyvatele |
 
 ---
 
