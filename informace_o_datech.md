@@ -12,6 +12,7 @@ Byly použity následující tabulky:
 
 - **`czechia_payroll`** – obsahuje údaje o mzdách a počtech zaměstnanců v jednotlivých odvětvích české ekonomiky.
 - **`czechia_payroll_industry_branch`** – číselník ekonomických odvětví (CZ-NACE), který umožňuje převod číselných kódů na názvy odvětví.
+- **`czechia_payroll_calculation`** – obsahuje číselník způsobů výpočtu mezd.
 - **`czechia_price`** – obsahuje historické ceny vybraných potravin sledovaných Českým statistickým úřadem.
 - **`czechia_price_category`** – číselník kategorií potravin s názvy, jednotkami a množstvím.
 - **`countries`** – seznam států včetně jejich geografického zařazení.
