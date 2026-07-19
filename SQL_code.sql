@@ -299,7 +299,7 @@ cte_hdp_cz AS (
 		stat,	
 		rok,	
 		hdp,
-		LEAD(hdp) OVER (ORDER BY rok DESC) AS hdp_dalsi_rok,
+		LEAD(hdp) OVER (ORDER BY rok) AS hdp_dalsi_rok,
 		populace,	
 		hdp_na_obyvatele
 	FROM t_petr_chalupa_project_sql_secondary_final tpcpssf
